@@ -8,14 +8,16 @@ import (
 )
 
 const (
-	REQUIRED_FIELD = "required"
-	MIN_LENGTH     = "too short, minimum %d characters"
-	MAX_LENGTH     = "too long, maximum %d characters"
-	MIN_VALUE      = "too small, minimum value is %d"
-	MAX_VALUE      = "too large, maximum value is %d"
-	EMAIL_FORMAT   = "invalid email address"
-	ENUM_OPTION    = "must be one of: %s"
-	UNIQUE_CHECK   = "already taken"
+	REQUIRED_FIELD  = "required"
+	MIN_LENGTH      = "too short, minimum %d characters"
+	MAX_LENGTH      = "too long, maximum %d characters"
+	MIN_VALUE       = "too small, minimum value is %d"
+	MAX_VALUE       = "too large, maximum value is %d"
+	EMAIL_FORMAT    = "invalid email address"
+	ENUM_OPTION     = "must be one of: %s"
+	UNIQUE_CHECK    = "already taken"
+	EQUAL_VALUE     = "must be equal to %v"
+	NOT_EQUAL_VALUE = "must not be equal to %v"
 
 	FIELD_NOT_FOUND = "unknown field '%s'"
 	INVALID_TYPE    = "unsupported type for field '%s'"
@@ -62,7 +64,7 @@ func (v *Validator) AddError(field, message string) {
 }
 
 func (v *Validator) Check(equal bool, field, message string) {
-	if equal {
+	if !equal {
 		v.AddError(field, message)
 	}
 }
@@ -187,6 +189,32 @@ func (v *Validator) InEnum(field string, validValues []string, customMsg ...stri
 	defaultMsg := fmt.Sprintf(ENUM_OPTION, strings.Join(validValues, ", "))
 	msg := msgOr(defaultMsg, customMsg...)
 	v.Check(found, field, msg)
+}
+
+// Equal checks if the field value equals the given value.
+// It supports any comparable type (string, int, float, bool, etc.).
+func (v *Validator) Equal(field string, expected interface{}, customMsg ...string) {
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	defaultMsg := fmt.Sprintf(EQUAL_VALUE, expected)
+	msg := msgOr(defaultMsg, customMsg...)
+	v.Check(reflect.DeepEqual(val.Interface(), expected), field, msg)
+}
+
+// NotEqual checks if the field value does not equal the given value.
+// It supports any comparable type (string, int, float, bool, etc.).
+func (v *Validator) NotEqual(field string, unexpected interface{}, customMsg ...string) {
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	defaultMsg := fmt.Sprintf(NOT_EQUAL_VALUE, unexpected)
+	msg := msgOr(defaultMsg, customMsg...)
+	v.Check(!reflect.DeepEqual(val.Interface(), unexpected), field, msg)
 }
 
 func (v *Validator) Unique(field string, checkFunc func(interface{}) bool, customMsg ...string) {

@@ -148,6 +148,84 @@ func TestInEnum(t *testing.T) {
 	}
 }
 
+func TestEqual(t *testing.T) {
+	// string match
+	user := TestUser{Name: "alice"}
+	v := New(&user)
+	v.Equal("Name", "alice")
+	if !v.IsValid() {
+		t.Error("expected Name to equal 'alice'")
+	}
+
+	// string mismatch
+	v2 := New(&user)
+	v2.Equal("Name", "bob")
+	if v2.IsValid() {
+		t.Error("expected validation to fail when Name != 'bob'")
+	}
+
+	// int match
+	user2 := TestUser{Age: 30}
+	v3 := New(&user2)
+	v3.Equal("Age", 30)
+	if !v3.IsValid() {
+		t.Error("expected Age to equal 30")
+	}
+
+	// int mismatch
+	v4 := New(&user2)
+	v4.Equal("Age", 25)
+	if v4.IsValid() {
+		t.Error("expected validation to fail when Age != 25")
+	}
+
+	// custom message
+	v5 := New(&user)
+	v5.Equal("Name", "bob", "name must be bob")
+	if v5.Errors["Name"] != "name must be bob" {
+		t.Errorf("expected custom message, got %q", v5.Errors["Name"])
+	}
+}
+
+func TestNotEqual(t *testing.T) {
+	// string mismatch — should pass
+	user := TestUser{Name: "alice"}
+	v := New(&user)
+	v.NotEqual("Name", "bob")
+	if !v.IsValid() {
+		t.Error("expected Name to not equal 'bob', so it should be valid")
+	}
+
+	// string match — should fail
+	v2 := New(&user)
+	v2.NotEqual("Name", "alice")
+	if v2.IsValid() {
+		t.Error("expected validation to fail when Name == 'alice'")
+	}
+
+	// int mismatch — should pass
+	user2 := TestUser{Age: 30}
+	v3 := New(&user2)
+	v3.NotEqual("Age", 25)
+	if !v3.IsValid() {
+		t.Error("expected Age to not equal 25, so it should be valid")
+	}
+
+	// int match — should fail
+	v4 := New(&user2)
+	v4.NotEqual("Age", 30)
+	if v4.IsValid() {
+		t.Error("expected validation to fail when Age == 30")
+	}
+
+	// custom message
+	v5 := New(&user)
+	v5.NotEqual("Name", "alice", "name cannot be alice")
+	if v5.Errors["Name"] != "name cannot be alice" {
+		t.Errorf("expected custom message, got %q", v5.Errors["Name"])
+	}
+}
+
 func TestUnique(t *testing.T) {
 	checkUnique := func(value interface{}) bool {
 		name := value.(string)
