@@ -8,12 +8,17 @@ import (
 )
 
 const (
-	REQUIRED_FIELD = "this field is required"
-	MIN_LENGTH     = "must be at least %d characters"
-	MAX_LENGTH     = "must be at most %d characters"
-	EMAIL_FORMAT   = "invalid email format"
-	ENUM_OPTION    = "must be one of the allowed options: %s"
-	UNIQUE_CHECK   = "must be unique" // Added constant for uniqueness
+	REQUIRED_FIELD = "required"
+	MIN_LENGTH     = "too short, minimum %d characters"
+	MAX_LENGTH     = "too long, maximum %d characters"
+	MIN_VALUE      = "too small, minimum value is %d"
+	MAX_VALUE      = "too large, maximum value is %d"
+	EMAIL_FORMAT   = "invalid email address"
+	ENUM_OPTION    = "must be one of: %s"
+	UNIQUE_CHECK   = "already taken"
+
+	FIELD_NOT_FOUND = "unknown field '%s'"
+	INVALID_TYPE    = "unsupported type for field '%s'"
 
 	DEFAULT_MIN_LENGTH = 8
 	DEFAULT_MAX_LENGTH = 72
@@ -66,56 +71,112 @@ func (v *Validator) Check(ok bool, field, message string) {
 
 // Required checks if the field is not zero-value (empty string, 0, nil, etc.)
 func (v *Validator) Required(field string, customMsg ...string) {
-	val := v.val(field)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
 	msg := msgOr(REQUIRED_FIELD, customMsg...)
 	v.Check(!val.IsZero(), field, msg)
 }
 
 func (v *Validator) MinInt(field string, min int, customMsg ...string) {
-	val := v.val(field)
-	msg := msgOr(fmt.Sprintf(MIN_LENGTH, min), customMsg...)
-
-	// Convert to int64 for safe comparison
-	currentVal := val.Int()
-	v.Check(currentVal >= int64(min), field, msg)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	switch val.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// valid integer kinds
+	default:
+		v.AddError(field, fmt.Sprintf(INVALID_TYPE, field))
+		return
+	}
+	msg := msgOr(fmt.Sprintf(MIN_VALUE, min), customMsg...)
+	v.Check(val.Int() >= int64(min), field, msg)
 }
 
 func (v *Validator) MaxInt(field string, max int, customMsg ...string) {
-	val := v.val(field)
-	msg := msgOr(fmt.Sprintf(MAX_LENGTH, max), customMsg...)
-
-	currentVal := val.Int()
-	v.Check(currentVal <= int64(max), field, msg)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	switch val.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// valid integer kinds
+	default:
+		v.AddError(field, fmt.Sprintf(INVALID_TYPE, field))
+		return
+	}
+	msg := msgOr(fmt.Sprintf(MAX_VALUE, max), customMsg...)
+	v.Check(val.Int() <= int64(max), field, msg)
 }
 
 func (v *Validator) MinLength(field string, min int, customMsg ...string) {
-	val := v.val(field)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	switch val.Kind() {
+	case reflect.String, reflect.Slice, reflect.Array, reflect.Map:
+		// valid kinds that support Len()
+	default:
+		v.AddError(field, fmt.Sprintf(INVALID_TYPE, field))
+		return
+	}
 	msg := msgOr(fmt.Sprintf(MIN_LENGTH, min), customMsg...)
 	v.Check(val.Len() >= min, field, msg)
 }
 
 func (v *Validator) MaxLength(field string, max int, customMsg ...string) {
-	val := v.val(field)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	switch val.Kind() {
+	case reflect.String, reflect.Slice, reflect.Array, reflect.Map:
+		// valid kinds that support Len()
+	default:
+		v.AddError(field, fmt.Sprintf(INVALID_TYPE, field))
+		return
+	}
 	msg := msgOr(fmt.Sprintf(MAX_LENGTH, max), customMsg...)
 	v.Check(val.Len() <= max, field, msg)
 }
 
 func (v *Validator) Email(field string, customMsg ...string) {
-	val := v.val(field)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	if val.Kind() != reflect.String {
+		v.AddError(field, fmt.Sprintf(INVALID_TYPE, field))
+		return
+	}
 	msg := msgOr(EMAIL_FORMAT, customMsg...)
-
 	if val.String() == "" {
 		return
 	}
-
 	_, err := mail.ParseAddress(val.String())
 	v.Check(err == nil, field, msg)
 }
 
 func (v *Validator) InEnum(field string, validValues []string, customMsg ...string) {
-	val := v.val(field)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
+	if val.Kind() != reflect.String {
+		v.AddError(field, fmt.Sprintf(INVALID_TYPE, field))
+		return
+	}
 	currentVal := val.String()
-
 	found := false
 	for _, valid := range validValues {
 		if currentVal == valid {
@@ -123,10 +184,8 @@ func (v *Validator) InEnum(field string, validValues []string, customMsg ...stri
 			break
 		}
 	}
-
 	defaultMsg := fmt.Sprintf(ENUM_OPTION, strings.Join(validValues, ", "))
 	msg := msgOr(defaultMsg, customMsg...)
-
 	v.Check(found, field, msg)
 }
 
@@ -134,23 +193,26 @@ func (v *Validator) Unique(field string, checkFunc func(interface{}) bool, custo
 	if _, hasError := v.Errors[field]; hasError {
 		return
 	}
-
-	val := v.val(field)
+	val, ok := v.val(field)
+	if !ok {
+		v.AddError(field, fmt.Sprintf(FIELD_NOT_FOUND, field))
+		return
+	}
 	isUnique := checkFunc(val.Interface())
-
 	msg := msgOr(UNIQUE_CHECK, customMsg...)
 	v.Check(isUnique, field, msg)
 }
 
 // -- Private Helper functions --
 
-// val reflects the value from the struct by field name
-func (v *Validator) val(field string) reflect.Value {
+// val reflects the value from the struct by field name.
+// Returns the reflected value and false (instead of panicking) when the field does not exist.
+func (v *Validator) val(field string) (reflect.Value, bool) {
 	f := v.data.FieldByName(field)
 	if !f.IsValid() {
-		panic(fmt.Sprintf("validator: field '%s' not found in struct", field))
+		return reflect.Value{}, false
 	}
-	return f
+	return f, true
 }
 
 func msgOr(defaultMsg string, custom ...string) string {

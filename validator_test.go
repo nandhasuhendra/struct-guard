@@ -271,3 +271,54 @@ func TestUniqueSkipsWhenFieldHasError(t *testing.T) {
 		t.Error("unique check should be skipped when field already has error")
 	}
 }
+
+func TestFieldNotFound(t *testing.T) {
+	user := TestUser{Name: "john"}
+	v := New(&user)
+
+	v.Required("NonExistentField")
+	v.MinLength("MissingField", 5)
+	v.MaxLength("MissingField2", 10)
+	v.Email("MissingEmail")
+	v.MinInt("MissingAge", 18)
+	v.MaxInt("MissingAge2", 100)
+	v.InEnum("MissingRole", []string{"admin"})
+	v.Unique("MissingName", func(v interface{}) bool { return true })
+
+	fields := []string{
+		"NonExistentField", "MissingField", "MissingField2",
+		"MissingEmail", "MissingAge", "MissingAge2",
+		"MissingRole", "MissingName",
+	}
+	for _, field := range fields {
+		if _, exists := v.Errors[field]; !exists {
+			t.Errorf("expected error for missing field %q", field)
+		}
+	}
+}
+
+func TestInvalidType(t *testing.T) {
+	user := TestUser{Name: "john", Age: 25}
+	v := New(&user)
+
+	// MinInt/MaxInt on a string field
+	v.MinInt("Name", 5)
+	v.MaxInt("Name", 50)
+
+	// MinLength/MaxLength on an int field
+	v.MinLength("Age", 2)
+	v.MaxLength("Age", 10)
+
+	// Email on an int field
+	v.Email("Age")
+
+	// InEnum on an int field
+	v.InEnum("Age", []string{"admin"})
+
+	invalidFields := []string{"Name", "Age"}
+	for _, field := range invalidFields {
+		if _, exists := v.Errors[field]; !exists {
+			t.Errorf("expected invalid-type error for field %q", field)
+		}
+	}
+}
