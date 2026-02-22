@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	validator "github.com/nandhasuhendra/struct-guard"
+	validator "github.com/nandhasuhendra/struct-guard/v2"
 )
 
 type User struct {
