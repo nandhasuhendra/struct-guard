@@ -61,8 +61,8 @@ func (v *Validator) AddError(field, message string) {
 	}
 }
 
-func (v *Validator) Check(ok bool, field, message string) {
-	if !ok {
+func (v *Validator) Check(equal bool, field, message string) {
+	if equal {
 		v.AddError(field, message)
 	}
 }
